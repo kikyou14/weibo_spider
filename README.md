@@ -2,4 +2,4 @@
 - Excessive requests will lead to a redirect to the login page.
 
 TODO:
-- [ ] detect error and retry from the last page.
+- [x] detect error and retry.
