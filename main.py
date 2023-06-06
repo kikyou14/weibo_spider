@@ -15,6 +15,7 @@ def req(comment_id, max_id, max_id_type):
     }
 
     content = requests.get(url, headers=headers)
+
     return content
 
 
@@ -25,7 +26,7 @@ db_name = str(weibo_id) + '_comments.db'
 conn = _sqlite3.connect(db_name)
 c = conn.cursor()
 c.execute('''
-        CREATE TABLE IF NOT EXISTS comments(z 
+        CREATE TABLE IF NOT EXISTS comments( 
             id TEXT PRIMARY KEY,
             created_time TEXT,
             screen_name TEXT,
@@ -33,6 +34,9 @@ c.execute('''
             content TEXT
         )
     ''')
+
+retry_count = 0
+max_retries = 5
 
 max_id_type = 0
 data = req(weibo_id, max_id='', max_id_type=0).json()
@@ -46,28 +50,35 @@ count = 1
 print(f'total {max_page} pages，{total_num} comments')
 print(f'the first page has {len(comments)} comments')
 time.sleep(5)
-while True:
-    content = req(weibo_id, max_id, max_id_type).json()
-    if content['ok'] == 0:
-        break
-    max_id = content['data']['max_id']
-    max_id_type = content['data']['max_id_type']
-    content = content['data']['data']
-    count += 1
-    print(f'page {count} has {len(content)} comments')
+while retry_count < max_retries:
+    try:
+        content = req(weibo_id, max_id, max_id_type).json()
+        if content['ok'] == 0:
+            break
+        max_id = content['data']['max_id']
+        max_id_type = content['data']['max_id_type']
+        content = content['data']['data']
+        count += 1
+        print(f'page {count} has {len(content)} comments')
 
-    for comment in content:
-        c.execute('''
-            INSERT OR REPLACE INTO comments VALUES (?,?,?,?,?)
-        ''', (
-            comment['id'],
-            comment['created_at'],
-            comment['user']['screen_name'],
-            comment['user']['id'],
-            comment['text']
-        ))
-    conn.commit()
-    if max_id == 0:
-        break
-    time.sleep(5)
+        for comment in content:
+            c.execute('''
+                INSERT OR REPLACE INTO comments VALUES (?,?,?,?,?)
+            ''', (
+                comment['id'],
+                comment['created_at'],
+                comment['user']['screen_name'],
+                comment['user']['id'],
+                comment['text']
+            ))
+        conn.commit()
+        if max_id == 0:
+            break
+        retry_count = 0
+        time.sleep(5)
+    except Exception as e:
+        retry_count += 1
+        print(f'an error occurred:{e},retrying...')
+        time.sleep(5)
+        continue
 conn.close()
